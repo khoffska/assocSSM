@@ -61,7 +61,8 @@ data "aws_ami" "amazon_linux_2" {
 }
 
 resource "aws_iam_role" "ec2_role" {
-  name = "ansible-node-role"
+  name                  = "ansible-ssm-role"
+  force_detach_policies = true
 
   assume_role_policy = file("${path.module}/iam/trust-policy.json")
 }
@@ -72,7 +73,7 @@ resource "aws_iam_role_policy_attachment" "ssm_managed" {
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "ansible-node-profile"
+  name = "ansible-ssm-profile"
   role = aws_iam_role.ec2_role.name
 }
 
