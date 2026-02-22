@@ -7,7 +7,8 @@ resource "aws_ssm_association" "ansible_association" {
   }
 
   parameters = {
-    playbook = file("${path.module}/ansible/site.yml")
+    playbook            = file("${path.module}/ansible/site.yml")
+    installDependencies = "True"
   }
 
   schedule_expression = "rate(30 minutes)"
