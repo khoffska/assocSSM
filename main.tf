@@ -40,6 +40,17 @@ module "security_group" {
   description = "Security group for SSM and internal access"
   vpc_id      = data.aws_vpc.selected.id
 
+  # HTTPS for SSM Endpoints
+  ingress_with_cidr_blocks = [
+    {
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      description = "HTTPS for SSM"
+      cidr_blocks = data.aws_vpc.selected.cidr_block
+    }
+  ]
+
   egress_with_cidr_blocks = [
     {
       from_port   = 0
@@ -102,4 +113,32 @@ module "ec2_instances" {
     Environment    = "dev"
     AnsibleManaged = "true"
   }
+}
+
+# SSM VPC Endpoints for private subnet connectivity
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = data.aws_subnets.private.ids
+  security_group_ids  = [module.security_group.security_group_id]
+  private_dns_enabled = true
+}
+
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = data.aws_subnets.private.ids
+  security_group_ids  = [module.security_group.security_group_id]
+  private_dns_enabled = true
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id              = data.aws_vpc.selected.id
+  service_name        = "com.amazonaws.${var.aws_region}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = data.aws_subnets.private.ids
+  security_group_ids  = [module.security_group.security_group_id]
+  private_dns_enabled = true
 }
