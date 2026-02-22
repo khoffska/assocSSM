@@ -1,36 +1,15 @@
-name: 'Deploy and Run Spark Job'
+name: 'Deploy and Run Ansible'
 
 on:
   workflow_dispatch:
-    inputs:
-      run_simple:
-        description: 'Run Simple Process Workflow'
-        required: true
-        type: boolean
-        default: true
-      run_intensive:
-        description: 'Run Intensive RDN Workflow'
-        required: true
-        type: boolean
-        default: false
-      run_logs:
-        description: 'Run Log Analysis Workflow'
-        required: true
-        type: boolean
-        default: false
-      computations:
-        description: 'Number of computations for RDN'
-        required: false
-        type: string
-        default: '1000'
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy-and-run:
-    name: 'Deploy and Run'
+  deploy:
+    name: 'Deploy'
     runs-on: ubuntu-latest
     
     steps:
@@ -42,7 +21,7 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role
         aws-region: us-east-1
-        role-session-name: GitHubActionsDeployRun
+        role-session-name: GitHubActionsAnsible
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -53,29 +32,13 @@ jobs:
     - name: Terraform Init
       run: terraform init
 
-    - name: Get Terraform Outputs
-      id: tf-outputs
-      run: |
-        echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
-        echo "emr_cluster_id=$(terraform output -raw emr_cluster_id)" >> $GITHUB_OUTPUT
+    - name: Terraform Plan
+      run: terraform plan
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+    - name: Terraform Apply
+      run: terraform apply -auto-approve
 
-    - name: Install Dependencies
+    - name: Verify SSM Association
       run: |
-        pip install pandas boto3 numpy
-
-    - name: Run Deploy Script
-      env:
-        S3_BUCKET: ${{ steps.tf-outputs.outputs.s3_bucket_name }}
-        EMR_CLUSTER_ID: ${{ steps.tf-outputs.outputs.emr_cluster_id }}
-        RUN_SIMPLE: ${{ github.event.inputs.run_simple }}
-        RUN_INTENSIVE: ${{ github.event.inputs.run_intensive }}
-        RUN_LOGS: ${{ github.event.inputs.run_logs }}
-        COMPUTATIONS: ${{ github.event.inputs.computations }}
-      run: |
-        chmod +x deploy_and_run.sh
-        ./deploy_and_run.sh "$S3_BUCKET" "$EMR_CLUSTER_ID"
+        echo "Terraform applied successfully."
+        echo "SSM Association will automatically trigger Ansible on instances with tag AnsibleManaged=true"

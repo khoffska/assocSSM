@@ -1,0 +1,14 @@
+- name: Basic Configuration
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure httpd is installed
+      yum:
+        name: httpd
+        state: present
+
+    - name: Ensure httpd is started
+      service:
+        name: httpd
+        state: started
+        enabled: yes
