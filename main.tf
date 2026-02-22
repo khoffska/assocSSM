@@ -21,6 +21,17 @@ data "aws_vpc" "selected" {
   id = data.aws_ssm_parameter.vpc_id.value
 }
 
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.selected.id]
+  }
+
+  tags = {
+    Name = "*-public"
+  }
+}
+
 data "aws_subnets" "private" {
   filter {
     name   = "vpc-id"
@@ -32,6 +43,11 @@ data "aws_subnets" "private" {
   }
 }
 
+# Fetch the route table for the private subnets
+data "aws_route_table" "private" {
+  subnet_id = element(data.aws_subnets.private.ids, 0)
+}
+
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "~> 5.0"
@@ -39,17 +55,6 @@ module "security_group" {
   name        = "ansible-sg"
   description = "Security group for SSM and internal access"
   vpc_id      = data.aws_vpc.selected.id
-
-  # HTTPS for SSM Endpoints
-  ingress_with_cidr_blocks = [
-    {
-      from_port   = 443
-      to_port     = 443
-      protocol    = "tcp"
-      description = "HTTPS for SSM"
-      cidr_blocks = data.aws_vpc.selected.cidr_block
-    }
-  ]
 
   egress_with_cidr_blocks = [
     {
@@ -115,30 +120,27 @@ module "ec2_instances" {
   }
 }
 
-# SSM VPC Endpoints for private subnet connectivity
-resource "aws_vpc_endpoint" "ssm" {
-  vpc_id              = data.aws_vpc.selected.id
-  service_name        = "com.amazonaws.${var.aws_region}.ssm"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = data.aws_subnets.private.ids
-  security_group_ids  = [module.security_group.security_group_id]
-  private_dns_enabled = true
+### NAT Gateway Local to Project
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+
+  tags = {
+    Name = "ansible-project-nat-eip"
+  }
 }
 
-resource "aws_vpc_endpoint" "ssmmessages" {
-  vpc_id              = data.aws_vpc.selected.id
-  service_name        = "com.amazonaws.${var.aws_region}.ssmmessages"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = data.aws_subnets.private.ids
-  security_group_ids  = [module.security_group.security_group_id]
-  private_dns_enabled = true
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = element(data.aws_subnets.public.ids, 0)
+
+  tags = {
+    Name = "ansible-project-nat-gw"
+  }
 }
 
-resource "aws_vpc_endpoint" "ec2messages" {
-  vpc_id              = data.aws_vpc.selected.id
-  service_name        = "com.amazonaws.${var.aws_region}.ec2messages"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = data.aws_subnets.private.ids
-  security_group_ids  = [module.security_group.security_group_id]
-  private_dns_enabled = true
+resource "aws_route" "private_nat" {
+  route_table_id         = data.aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main.id
 }
